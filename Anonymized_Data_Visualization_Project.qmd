@@ -1,0 +1,613 @@
+---
+title: "AnonymousCompany Project - Time Series"
+author: "Luke Stucky"
+theme: cosmo
+format: dashboard
+logo: blue_drop.png
+editor: visual
+---
+
+### Loading in datasets
+
+```{r}
+#| include: false
+
+load("AnonymousCompany_DSRATING_APPEND_20240401.RData")
+DS <- dsdata2
+load("AnonymousCompany_GIVING_CLEAN_USONLY_20240401.RData")
+Giving <- gs5
+load("state_abbrev.RData")
+State <- state_abbrev
+```
+
+### Packages
+
+```{r}
+#| include: false
+
+library(dplyr)
+library(tidyverse)
+library(plotly)
+library(ggplot2)
+library(plotly)
+library(RColorBrewer)
+library(tidyverse)
+library(scales)
+```
+
+# Total Donation Trend
+
+## Row {height="20%"}
+
+```{r}
+#| include: false
+combined_data <- merge(DS, Giving, by = "accountid", all = TRUE)
+```
+
+```{r}
+#| content: valuebox
+#| title: "Lifetime Donations"
+
+list(color = "green",
+  value = dollar(sum(Giving$giving_lifetime))
+)
+```
+
+```{r}
+#| content: valuebox
+#| title: "Total Donations in 2017"
+
+list(color = "yellow",
+  value = dollar(sum(Giving$giving2017))
+)
+```
+
+```{r}
+#| content: valuebox
+#| title: "Total Donations in 2021"
+
+list(color = "blue",
+  value = dollar(sum(Giving$giving2021))
+)
+```
+
+## Row {height="80%"}
+
+### Column {width="40%"}
+
+```{r}
+#| title: "Total Giving Each Year"
+
+# Total Giving Each Year Function
+calculate_total_giving <- function(data) {
+  total_giving <- Giving %>%
+    summarise(
+      giving2017 = sum(giving2017, na.rm = TRUE),
+      giving2018 = sum(giving2018, na.rm = TRUE),
+      giving2019 = sum(giving2019, na.rm = TRUE),
+      giving2020 = sum(giving2020, na.rm = TRUE),
+      giving2021 = sum(giving2021, na.rm = TRUE)
+    ) %>%
+    pivot_longer(cols = starts_with("giving"), names_to = "year", values_to = "total_giving")
+  
+  return(total_giving)
+}
+
+# Total Giving Each Year Calculated
+total_giving <- calculate_total_giving(Giving)
+
+# Select Colors
+color_palette <- brewer.pal(5, "Set3")
+
+# Create Line Chart
+line_chart <- plot_ly(total_giving, x = ~year, y = ~total_giving, type = 'scatter', mode = 'lines+markers',
+                      line = list(color = color_palette[1], width = 5)) %>%
+  layout(title = "Total Giving Each Year",
+         xaxis = list(title = "Year"),
+         yaxis = list(title = "Total Giving"))
+
+# Line Chart Output
+line_chart
+```
+
+**Key Findings:** - Total giving was increasing steadily until 2020, and then it fell.\
+- Despite the fall in donations in 2020, total donations in 2021 were able to recover.\
+
+# DS Ratings
+
+## Row {height="20%"}
+
+#### Column {.tabset}
+
+```{r}
+#| content: text
+#| title: "DS 1-1"
+cat("High-quality match as a donor giving a single gift of $5,000 or more to a nonprofit or political organization found in DonorSearch’s charitable giving database. A DS1-1 rated prospect may have markers of wealth or may only be matched to a significant giving history, and have no notable wealth markers.")
+
+```
+
+```{r}
+#| content: text
+#| title: "DS 1-2"
+cat("High-quality match to one or more exceptional markers of wealth including Real Estate holdings of $2+ Million, business executives at a firm with revenues of $5+ Million, a Foundation Trustee, SEC Insider and/or cumulative Federal political giving of $10k+.")
+
+```
+
+```{r}
+#| content: text
+#| title: "DS 1-3"
+cat("High-quality match to one or more lower--but notable--markers of wealth, including Real Estate holdings of $1-2 Million, a business executive at a firm with revenues of $1-5 Million, and/or cumulative Federal political giving of $5-$10k+.")
+
+```
+
+```{r}
+#| content: text
+#| title: "DS 1-4"
+cat("High-quality matches to one or more significant markers of wealth, including Real Estate holdings of $500,000-1 Million, ownership of at least three properties or a real estate trust, and/or a single gift of over $500.")
+```
+
+```{r}
+#| content: text
+#| title: "DS 1-5"
+cat("High-quality matches to markers of wealth or philanthropy, including one or more of the following: A business executive at a firm with revenues of $1 Million, or the strong possibility of being an SEC insider and/or member of a foundation board.")
+```
+
+```{r}
+#| content: text
+#| title: "DS 2"
+cat("Exact match to selected markers of wealth including Airplane or Boat ownership and/or a holder of a pilot’s license.")
+```
+
+```{r}
+#| content: text
+#| title: "DS 3"
+cat("No noteworthy matches to giving history or wealth indicators. Note: If the name or address matched is inaccurate, the rating is automatically DS 3.")
+```
+
+## Row {height="80%"}
+
+### Column {width="40%"}
+
+### Column {.tabset}
+
+```{r}
+#| title: "Average Giving for DS Ratings"
+
+
+# DS Ratings to include
+desired_ds_ratings <- c("DS1-1", "DS1-2", "DS1-3", "DS1-4", "DS1-5", "DS2", "DS3")
+
+# DS Ratings Factored
+combined_data$ds_rating <- factor(combined_data$ds_rating)
+
+# Group By DS Ratings and Find Average Giving of Each Rating
+average_giving <- combined_data %>%
+  filter(!is.na(ds_rating)) %>%  # Exclude rows with NA in ds_rating
+  filter(ds_rating %in% desired_ds_ratings) %>%  # Filter desired DS ratings
+  group_by(ds_rating) %>%
+  summarise(average_giving = mean(giving_lifetime, na.rm = TRUE),
+            count_accounts = n())
+
+# Select Colors
+colors <- brewer.pal(12, "Paired")
+
+# Bar Chart Created
+p <- ggplot(average_giving, aes(x = ds_rating, y = average_giving, text = paste("<br>Accounts: ", count_accounts))) +
+  geom_bar(stat = "identity", fill = colors[3]) +  # Use the first color from Set3 palette
+  labs(x = "DS Rating", y = "Average Lifetime Giving Amount", title = "Average Lifetime Giving Amount by DS Rating") +
+  theme_minimal()
+
+# Interactive Chart Output
+ggplotly(p)
+```
+
+**Key Findings:**\
+- DS1-1, DS1-2, and DS1-3 have the highest average giving amount, but they have fewer accounts than DS1-4, DS1-5, and DS3.\
+- While some ratings may have a higher average giving amount, they may not have as many accounts in their rating.\
+- The DS2 rating (no noteworthy matches to giving history/wealth) has the lowest average lifetime giving amount of less than \$1,000.\
+
+### Column {.tabset}
+
+```{r}
+#| title: "Average Giving by Year for Top Five DS Ratings"
+#| include: false
+# Define the desired DS ratings
+desired_ds_ratings <- c("DS1-1", "DS1-2", "DS1-3", "DS1-4", "DS1-5", "DS2", "DS3")
+
+# Top Five DS Rating Donors
+top_ratings <- combined_data %>%
+  filter(!is.na(ds_rating)) %>% 
+  group_by(ds_rating) %>%
+  summarise(average_giving = mean(giving_lifetime, na.rm = TRUE)) %>%
+  filter(ds_rating %in% desired_ds_ratings) %>%  # Filter desired DS ratings
+  top_n(7, average_giving) %>%
+  arrange(desc(average_giving)) %>%
+  pull(ds_rating)
+
+# Top DS Rating Donor Data
+top_ratings_data <- combined_data %>%
+  filter(ds_rating %in% top_ratings)
+
+# Calculate Average Giving by Year for Top Five DS Ratings
+average_giving_by_year <- top_ratings_data %>%
+  group_by(ds_rating) %>%
+  summarise(
+    mean_2017 = mean(giving2017, na.rm = TRUE),
+    mean_2018 = mean(giving2018, na.rm = TRUE),
+    mean_2019 = mean(giving2019, na.rm = TRUE),
+    mean_2020 = mean(giving2020, na.rm = TRUE),
+    mean_2021 = mean(giving2021, na.rm = TRUE)
+  ) %>%
+  pivot_longer(cols = starts_with("mean"), names_to = "year", values_to = "average_giving")
+
+# Create Line Chart
+p <- ggplot(average_giving_by_year, aes(x = year, y = average_giving, color = ds_rating, group = ds_rating)) +
+  geom_line(size = 1.5) +
+  geom_point() +
+  labs(title = "Average Giving by Year for Top Five DS Ratings",
+       x = "Year",
+       y = "Average Giving",
+       color = "DS Rating") +
+  scale_color_brewer(palette = "Paired") +
+  theme_minimal()
+
+# Create Interactive Chart
+ggplotly(p)
+```
+
+```{r}
+#| title: "Top Donating DS Ratings Each Year"
+
+# Define the desired DS ratings
+desired_ds_ratings <- c("DS1-1", "DS1-2", "DS1-3", "DS1-4", "DS1-5", "DS2", "DS3")
+
+# Top Five DS Rating Donors
+top_ratings <- combined_data %>%
+  filter(!is.na(ds_rating)) %>% 
+  group_by(ds_rating) %>%
+  summarise(average_giving = mean(giving_lifetime, na.rm = TRUE)) %>%
+  filter(ds_rating %in% desired_ds_ratings) %>%  # Filter desired DS ratings
+  top_n(7, average_giving) %>%
+  arrange(desc(average_giving)) %>%
+  pull(ds_rating)
+
+# Top DS Rating Donor Data
+top_ratings_data <- combined_data %>%
+  filter(ds_rating %in% top_ratings)
+
+# Subset by Year
+giving_by_year <- top_ratings_data %>%
+  group_by(ds_rating) %>%
+  summarise(
+    giving2017 = sum(giving2017, na.rm = TRUE),
+    giving2018 = sum(giving2018, na.rm = TRUE),
+    giving2019 = sum(giving2019, na.rm = TRUE),
+    giving2020 = sum(giving2020, na.rm = TRUE),
+    giving2021 = sum(giving2021, na.rm = TRUE)
+  ) %>%
+  pivot_longer(cols = starts_with("giving"), names_to = "year", values_to = "total_giving")
+
+# Create Line Chart
+p <- ggplot(giving_by_year, aes(x = year, y = total_giving, color = ds_rating, group = ds_rating)) +
+  geom_line(size = 2) +
+  geom_point() +
+  labs(title = "Total Giving by Year for Top DS Ratings",
+       x = "Year",
+       y = "Total Giving",
+       color = "DS Rating") +
+  scale_color_brewer(palette = "Paired") +
+  theme_minimal()
+
+# Create Interactive Chart
+ggplotly(p)
+
+```
+
+**Key Findings:**\
+- DS1-1, DS1-2, DS1-3, and DS3 stay consistent in their total giving each year, but they are not the top total donors.\
+- DS1-5 has been the second highest donor each year, and in 2021, they become the highest. It appears that they will stay ahead in upcoming years.\
+- The DS1-4 rating has been the highest donor up until 2021, where DS1-5 goes ahead of them.\
+- DS2 only has three in their category, so they make up a very small amount of the total giving.
+
+# Account Type
+
+## Row {width="20%"}
+
+```{r}
+#| include: false
+# Calculate Total Lifetime Giving for Households and Organizations
+total_lifetime_giving <- combined_data %>%
+  group_by(account_type) %>%
+  summarise(lifetime_giving = sum(giving_lifetime, na.rm = TRUE))
+
+# Filter Data for Household and Organization
+household_lifetime_giving <- total_lifetime_giving %>%
+  filter(account_type == "Household Account") %>%
+  pull(lifetime_giving)
+
+organization_lifetime_giving <- total_lifetime_giving %>%
+  filter(account_type == "Organization") %>%
+  pull(lifetime_giving)
+```
+
+```{r}
+#| content: valuebox
+#| title: "Household Donations"
+list(color = "blue",
+  value = dollar(sum(household_lifetime_giving))
+)
+
+```
+
+```{r}
+#| content: valuebox
+#| title: "Organization Donations"
+
+list(color = "green",
+  value = dollar(sum(organization_lifetime_giving))
+)
+```
+
+## Row {height="80%"}
+
+### Column {width="40%"}
+
+### Column {.tabset}
+
+```{r}
+#| title: "Organizations versus Households Donation Percentages"
+
+# Total Donations Each Year
+combined_data <- combined_data %>%
+  mutate(total_donations = rowSums(select(., c("giving2017", "giving2018", "giving2019", "giving2020", "giving2021")), na.rm = TRUE))
+
+# Total Donations By Account Type Each Year
+account_type_total <- combined_data %>%
+  pivot_longer(cols = c(giving2017, giving2018, giving2019, giving2020, giving2021),
+               names_to = "year",
+               values_to = "total_giving") %>%
+  filter(!is.na(account_type)) %>%
+  group_by(year, account_type) %>%
+  summarise(total_giving = sum(total_giving, na.rm = TRUE)) %>%
+  group_by(year) %>%
+  mutate(percentage = total_giving / sum(total_giving) * 100) %>%
+  ungroup()
+
+# Select Colors
+colors <- brewer.pal(12, "Paired")
+
+# Create Dodged Bar Chart
+p <- ggplot(account_type_total, aes(x = year, y = percentage, fill = account_type)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(title = "Percentage of Total Donations by Account Type Each Year",
+       x = "Year",
+       y = "Percentage of Total Donations") +
+  theme_minimal() +
+  theme(legend.position = "bottom") +
+  scale_fill_manual(values = colors[2:3], labels = c("Household", "Organization"))
+
+# Create Interactive Chart
+ggplotly(p)
+
+```
+
+**Key Findings:**\
+- Household Accounts consistently contribute the majority of total donations across all years.\
+- It appears that households were pulling away and donating a lot more than organizations up until 2021.\
+- While households make up the majority of donations currently, it could change in the upcoming years as we are starting to see a shift in the year 2021.\
+
+### Column {.tabset}
+
+```{r}
+#| title: Organizations versus Households Consistently
+
+# Create Consistency Variable
+combined_data <- combined_data %>%
+  mutate(
+    total_donations = rowSums(select(., starts_with("giving")) > 0),
+    consecutive_donations = rowSums(select(., starts_with("giving")) > 0) == 5,
+    consistency_rank = case_when(
+      consecutive_donations ~ "Very High",
+      total_donations >= 4 | total_donations == 3 ~ "High",
+      total_donations == 2 | total_donations == 3 ~ "Medium",
+      TRUE ~ "Low"
+    )
+  )
+
+# Filter out NA values in account_type
+combined_data <- combined_data[!is.na(combined_data$account_type),]
+
+# Specify the order of levels for consistency_rank
+combined_data$consistency_rank <- factor(combined_data$consistency_rank, levels = c("Low", "Medium", "High", "Very High"))
+# Select Colors
+colors <- brewer.pal(12, "Paired")
+
+# Create Dodged Bar Chart
+chart_dodge <- combined_data %>%
+  group_by(account_type, consistency_rank) %>%
+  summarise(count = n()) %>%
+  mutate(percentage = count / sum(count) * 100) %>%
+  ggplot(aes(x = consistency_rank, y = percentage, fill = factor(account_type))) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(title = "Comparison of Consistency Rank between Households and Organizations",
+       x = "Consistency Rank",
+       y = "Percentage of Account IDs",
+       fill = "Account Type") +
+  theme_minimal() +
+  scale_fill_manual(values = colors[2:3], labels = c("Household", "Organization"))
+
+# Create Interactive Chart
+ggplotly(chart_dodge)
+```
+
+**Key Findings:**\
+- Both organizations and households follow a similar trend. They both have a small percentage of rank 1, then their highest consistency rank is 2, and then they decrease.\
+- Rank 2 is the most common for accounts to be in.\
+- Organizations tend to donate more consistently, as they have a higher percentage of accounts in ranks 3 and 4.\
+
+# State Trends
+
+```{r}
+#| title: "Most Valuable States"
+
+# Find Total Giving of Each State Each Year
+data_total <- Giving %>%
+  group_by(state) %>%
+  summarise(giving2017 = sum(giving2017),
+            giving2018 = sum(giving2018),
+            giving2019 = sum(giving2019),
+            giving2020 = sum(giving2020),
+            giving2021 = sum(giving2021),
+            .groups = "drop")
+
+top_states <- data_total %>%
+  pivot_longer(cols = starts_with("giving"),
+               names_to = "year",
+               values_to = "total_giving") %>%
+  group_by(year) %>%
+  top_n(5, total_giving) %>%
+  arrange(year, desc(total_giving)) %>%
+  ungroup()
+
+# Select Colors
+colors <- brewer.pal(12, "Paired")
+
+# Create Dodged Bar Chart
+p <- ggplot(top_states, aes(x = year, y = total_giving, fill = state)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(title = "Top Donating States Each Year",
+       x = "Year",
+       y = "Total Giving") +
+  theme_minimal() +
+  theme(legend.position = "bottom") +
+  scale_fill_manual(values = colors[1:10])
+
+# Create Interactive Chart
+ggplotly(p)
+```
+
+## Column {width="20%"}
+
+### Row {height="40%"}
+
+::: card
+**Maps Insights**\
+- California consistently led state giving each year from 2017 to 2020, peaking at 49.22% in 2017 but declining to 21.45% in 2021. This decline may reflect shifting donor priorities or external factors impacting donation behavior.\
+- Tennessee emerged as a notable contributor in 2021, with a remarkable donation percentage of 15.53%. Factors such as successful advocacy campaigns or targeted fundraising efforts likely contributed to this trend.\
+- Overall, regional dynamics played a significant role in state giving, with variations in donation percentages influenced by factors such as proximity to water-related issues, socioeconomic factors, and changing donor preferences. Adaptability in fundraising strategies and responsiveness to regional contexts emerged as key factors in maximizing charitable contributions.\
+:::
+
+```{r}
+#| title: "State Giving Each Year"
+
+# Grouping By State
+create_us_map <- function(data, year) {
+  map_data <- Giving %>%
+    filter(!is.na(state)) %>%
+    group_by(state) %>%
+    summarise(total_giving = sum(get(paste0("giving", year)), na.rm = TRUE)) %>%
+    ungroup() %>%
+    mutate(percentage_contribution = total_giving / sum(total_giving) * 100)
+  
+  # Creating Maps That Show Percentage of Giving
+  plot_ly(
+    data = map_data,
+    type = 'choropleth',
+    locationmode = 'USA-states',
+    locations = ~state,
+    z = ~percentage_contribution,
+    text = ~paste("State: ", state, "<br>",
+                  "Percentage of Total Giving: ", percentage_contribution, "%<br>"),
+    colorscale = list(c(0, "rgb(202, 225, 255)"),   # Light blue
+                      c(0.25, "rgb(107, 174, 214)"),
+                      c(0.5, "rgb(49, 130, 189)"),
+                      c(0.75, "rgb(8, 81, 156)"),
+                      c(1, "rgb(8, 48, 107)")),     # Dark blue
+    zmax = 50,  # Ensure color scale starts from 0
+    zmin = 0,   # Set the maximum of color scale to 50
+    marker = list(line = list(color = 'rgb(255,255,255)', width = 2)),
+    colorbar = list(title = "Percentage of Total Giving")
+  ) %>%
+    layout(title = paste("Percentage Contribution of Each State to Total Giving in", year),
+           geo = list(scope = 'usa'))
+}
+```
+
+### Column {.tabset}
+
+```{r}
+#| title: "2017"
+create_us_map(combined_data, 2017)
+```
+
+```{r}
+#| title: "2018"
+create_us_map(combined_data, 2018)
+```
+
+```{r}
+#| title: "2019"
+create_us_map(combined_data, 2019)
+```
+
+```{r}
+#| title: "2020"
+create_us_map(combined_data, 2020)
+```
+
+```{r}
+#| title: "2021"
+create_us_map(combined_data, 2021)
+```
+
+# Insights Page
+
+## Row {height="20%"}
+
+```{r}
+#| include: false
+combined_data <- merge(DS, Giving, by = "accountid", all = TRUE)
+```
+
+```{r}
+#| content: valuebox
+#| title: "DS 1-4 and DS 1-5 Lifetime Giving"
+
+total_ds1_4_5_giving <- sum(combined_data$giving_lifetime[combined_data$ds_rating %in% c("DS1-4", "DS1-5")], na.rm = TRUE)
+
+list(color = "green",
+  value = dollar(total_ds1_4_5_giving)
+)
+```
+
+```{r}
+#| content: valuebox
+#| title: "Very High Consistency Lifetime Giving"
+combined_data <- combined_data %>%
+  mutate(
+    total_donations = rowSums(select(., starts_with("giving")) > 0),
+    consecutive_donations = rowSums(select(., starts_with("giving")) > 0) == 5,
+    consistency_rank = case_when(
+      consecutive_donations ~ "Very High",
+      total_donations >= 4 | total_donations == 3 ~ "High",
+      total_donations == 2 | total_donations == 3 ~ "Medium",
+      TRUE ~ "Low"
+    )
+  )
+very_high_lifetime_giving <- sum(combined_data$giving_lifetime[combined_data$consistency_rank == "Very High"], na.rm = TRUE)
+
+list(color = "yellow",
+  value = dollar(very_high_lifetime_giving)
+)
+```
+
+```{r}
+#| content: valuebox
+#| title: "California Lifetime Giving"
+
+california_lifetime_giving <- sum(Giving$giving_lifetime[Giving$state == "CA"], na.rm = TRUE)
+
+list(color = "blue",
+  value = dollar(california_lifetime_giving)
+)
+```
